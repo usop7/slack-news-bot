@@ -22,7 +22,7 @@ const sendResponse = (event) => {
     });
 };
 
-exports.bot = async (even, context, callback) => {
+exports.bot = async (event, context, callback) => {
     console.log(event);
     if (event.type === 'url_verification') {
         return event.challenge;
