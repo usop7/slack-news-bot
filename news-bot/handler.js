@@ -1,3 +1,4 @@
+const https = require('https');
 const qs = require('querystring');
 const fetch = require('node-fetch');
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -27,7 +28,7 @@ function process(event, callback) {
 }
 
 // Lambda handler
-exports.handler = (data, context, callback) => {
+exports.bot = (data, context, callback) => {
   switch (data.type) {
       case "url_verification": verify(data, callback); break;
       case "event_callback": process(data.event, callback); break;
