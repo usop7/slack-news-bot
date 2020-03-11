@@ -1,55 +1,87 @@
 const qs = require('querystring');
 const fetch = require('node-fetch');
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const API_KEY = process.env.API_KEY;
+const VERIFICATION_TOKEN = process.env.VERIFICATION_TOKEN;
+const NEWS_API_KEY = process.env.API_KEY;
 
-// Verify Url - https://api.slack.com/events/url_verification
-const verify = (data, callback) => {
-  if (data.token === BOT_TOKEN) callback(null, data.challenge);
-  else callback("verification failed");   
-}
-
-// Fetch News data
-const getNewsData = (event) => {
-  const results = new Promise((resolve, reject) => {
-    const keyword = event.text.trim();
-    fetch(`https://content.guardianapis.com/search?q=${keyword}&api-key=${API_KEY}`)
-    .then(res => res.json())
-    .then(data => {
-      const str = JSON.stringify(data.response.results);
-      resolve(str);
-    })
-    .catch(err => reject(err));
+// Verify Url
+const verifyUrl = (event) => {
+  return new Promise((resolve, reject) => {
+    if (event.type === 'url_verification') {
+      resolve(event.challenge);
+    }
+    resolve(event);
   });
 }
 
-
-// Post message to Slack - https://api.slack.com/methods/chat.postMessage
-const post = (event, callback) => {
-  // test the message for a match and not a bot
-  if (!event.bot_id) {
-    const keyword = event.text.trim();
-    getNewsData(event)
-    .then(data => {
-      const text = `<@${event.user}> Here is the recent news\n ${data}`;
-      var message = { 
-          token: BOT_TOKEN,
-          channel: event.channel,
-          text: text
-      };
-      var query = qs.stringify(message); // prepare the querystring
-      fetch(`https://slack.com/api/chat.postMessage?${query}`);
-    }, (err) => console.log(err));
+// Make sure it doesn't process for bot messages
+const checkBot = (event) => {
+  if (!event.event.bot_id) {
+    return event;
   }
-
-  callback(null);
 }
 
-// Lambda handler
-exports.bot = (data, context, callback) => {
-  switch (data.type) {
-      case "url_verification": verify(data, callback); break;
-      case "event_callback": post(data.event, callback); break;
-      default: callback(null);
-  }
-};
+// Verify Token
+const verifyToken = (event) => {
+  return new Promise((resolve, reject) => {
+    if (event.token !== VERIFICATION_TOKEN) {
+      reject('Invalid Token');
+    }
+    resolve(event);
+  });
+}
+
+// Fetch News data and return the results
+const getNewsData = (event) => {
+  const keyword = event.event.text.trim();
+  console.log('requesting news about' + keyword);
+  return fetch(`https://content.guardianapis.com/search?q=${keyword}&api-key=${NEWS_API_KEY}`)
+  .then(res => res.json())
+  .then(data => data.response.results)
+  .catch(err => err);
+}
+
+// Format News Data
+const formatNewsData = (user, keyword, data) => {
+  return new Promise((resolve, reject) => {
+    let str = '';
+    if (data.length === 0) {
+      str = `<@${user}> There is no recent news about '${keyword}'`;
+      resolve(str);
+    } else {
+      str = `<@${user}> Here is the recent news about '${keyword}'\n\n`;
+    }
+    for (const news of data) {
+      str += `${news.webTitle} (${news.webPublicationDate})\n${news.webUrl}\n\n`;
+    }
+    resolve(str);
+  });
+}
+
+// Post message to Slack
+const post = (channel, user, data) => {
+  const message = { 
+    token: BOT_TOKEN,
+    channel: channel,
+    text: data
+  };
+  const query = qs.stringify(message);
+  return fetch(`https://slack.com/api/chat.postMessage?${query}`);
+}
+
+
+// Lambda Handler
+exports.bot = (event, context, callback) => {
+  const text = event.event.text;
+  const keyword = /^<@[A-Z0-9]*>(.+)/.exec(text)[1].trim();
+  const channel = event.event.channel;
+  const user = event.event.user;
+
+  verifyUrl(event)
+  .then(checkBot)
+  .then(verifyToken)
+  .then(getNewsData)
+  .then(formatNewsData.bind(null, user, keyword))
+  .then(post.bind(null, channel, user))
+  .catch(callback)
+}
