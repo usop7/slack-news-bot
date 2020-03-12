@@ -31,11 +31,27 @@ const verifyToken = (event) => {
   });
 }
 
+// Helper method to format date as 'yyyy-mm-dd'
+formatDate = (date) => {
+  let d = new Date(date),
+    month = '' + (d.getMonth() + 1),
+    day = '' + d.getDate(),
+    year = d.getFullYear();
+
+  if (month.length < 2) 
+      month = '0' + month;
+  if (day.length < 2) 
+      day = '0' + day;
+
+  return [year, month, day].join('-');
+}
+
 // Fetch News data and return the results
 const getNewsData = (event) => {
   const keyword = event.event.text.trim();
+  let oneWeekAgo = new Date().setDate(new Date().getDate() - 7);
   console.log('requesting news about' + keyword);
-  return fetch(`https://content.guardianapis.com/search?q=${keyword}&api-key=${NEWS_API_KEY}`)
+  return fetch(`https://content.guardianapis.com/search?q=${keyword}&from-date=${formatDate(oneWeekAgo)}&api-key=${NEWS_API_KEY}`)
   .then(res => res.json())
   .then(data => data.response.results)
   .catch(err => err);
